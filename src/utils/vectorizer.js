@@ -1,5 +1,4 @@
 const natural = require('natural');
-const tokenizer = new natural.WordTokenizer();
 const stemmer = natural.PorterStemmer;
 
 const STOPWORDS = new Set([
@@ -14,7 +13,6 @@ function processText(text) {
     return [];
   }
 
-  // Convert to lowercase, remove special chars, and tokenize
   const tokens = text.toLowerCase()
                     .replace(/[^\w\s]/g, ' ')
                     .split(/\s+/)
@@ -22,35 +20,81 @@ function processText(text) {
                     .map(token => stemmer.stem(token))
                     .filter(token => !STOPWORDS.has(token));
 
-  return [...new Set(tokens)]; // Remove duplicates
+  return tokens;
 }
 
-function calculateTermFrequency(term, tokens) {
-  const termCount = tokens.filter(t => t === term).length;
-  return termCount / tokens.length;
-}
+function buildTermFrequencyMap(tokens) {
+  const termFrequency = new Map();
 
-function calculateIDF(term, docs) {
-  const docsWithTerm = docs.filter(doc => doc.includes(term)).length;
-  return Math.log(docs.length / (1 + docsWithTerm));
-}
-
-function createTFIDFVector(tokens, allDocs) {
-  if (!Array.isArray(tokens) || !Array.isArray(allDocs)) {
-    return [];
+  if (!Array.isArray(tokens)) {
+    return termFrequency;
   }
 
-  // Get unique terms across all documents
-  const allTerms = new Set();
-  [tokens, ...allDocs].forEach(doc => {
-    doc.forEach(term => allTerms.add(term));
+  tokens.forEach(term => {
+    termFrequency.set(term, (termFrequency.get(term) || 0) + 1);
   });
-  const terms = Array.from(allTerms);
 
-  // Calculate TF-IDF for each term
-  return terms.map(term => {
-    const tf = calculateTermFrequency(term, tokens);
-    const idf = calculateIDF(term, allDocs);
+  return termFrequency;
+}
+
+function calculateTermFrequency(term, termFrequencyMap, tokenCount) {
+  if (!(termFrequencyMap instanceof Map) || tokenCount === 0) {
+    return 0;
+  }
+
+  return (termFrequencyMap.get(term) || 0) / tokenCount;
+}
+
+function buildVocabulary(documents, queryTokens = []) {
+  const vocabulary = new Set();
+
+  documents.forEach(doc => {
+    if (Array.isArray(doc)) {
+      doc.forEach(term => vocabulary.add(term));
+    }
+  });
+
+  queryTokens.forEach(term => vocabulary.add(term));
+
+  return Array.from(vocabulary);
+}
+
+function calculateDocumentFrequencies(documents) {
+  const df = new Map();
+
+  documents.forEach(doc => {
+    if (!Array.isArray(doc)) {
+      return;
+    }
+
+    const seenTerms = new Set(doc);
+    seenTerms.forEach(term => {
+      df.set(term, (df.get(term) || 0) + 1);
+    });
+  });
+
+  return df;
+}
+
+function buildIDFMap(vocabulary, documentFrequencies, documentCount) {
+  const idfMap = new Map();
+
+  vocabulary.forEach(term => {
+    const df = documentFrequencies.get(term) || 0;
+    idfMap.set(term, Math.log((documentCount + 1) / (df + 1)) + 1);
+  });
+
+  return idfMap;
+}
+
+function createTFIDFVector(termFrequencyMap, tokenCount, vocabulary, idfMap) {
+  if (!(termFrequencyMap instanceof Map) || !Array.isArray(vocabulary) || !idfMap) {
+    return Array.isArray(vocabulary) ? vocabulary.map(() => 0) : [];
+  }
+
+  return vocabulary.map(term => {
+    const tf = calculateTermFrequency(term, termFrequencyMap, tokenCount);
+    const idf = idfMap.get(term) || 0;
     return tf * idf;
   });
 }
@@ -82,6 +126,10 @@ function cosineSimilarity(vec1, vec2) {
 
 module.exports = {
   processText,
+  buildTermFrequencyMap,
+  buildVocabulary,
+  calculateDocumentFrequencies,
+  buildIDFMap,
   createTFIDFVector,
   cosineSimilarity
 };

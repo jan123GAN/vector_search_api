@@ -10,11 +10,6 @@ const documentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  vector: {
-    type: [Number],
-    required: true,
-    default: []
-  },
   processedContent: {
     type: [String],
     required: true
